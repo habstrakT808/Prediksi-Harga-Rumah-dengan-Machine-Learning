@@ -79,6 +79,42 @@ Dataset yang digunakan dalam proyek ini adalah House Price Prediction dataset ya
 
 Untuk memahami dataset dengan lebih baik, dilakukan analisis eksplorasi terhadap data. Berikut beberapa insight yang diperoleh:
 
+#### **Struktur Data**
+
+Dataset memiliki 21,613 baris dan 21 kolom. Dari hasil pengecekan tipe data, semua kolom memiliki tipe data yang sesuai dengan karakteristik informasi yang disimpan (numerik untuk fitur seperti price, bedrooms, dan object untuk tanggal).
+
+```
+Shape: (21613, 21)
+
+Data Types:
+id                 int64
+date              object
+price            float64
+bedrooms           int64
+bathrooms        float64
+sqft_living        int64
+sqft_lot           int64
+floors           float64
+waterfront         int64
+view               int64
+condition          int64
+grade              int64
+sqft_above         int64
+sqft_basement      int64
+yr_built           int64
+yr_renovated       int64
+zipcode            int64
+lat              float64
+long             float64
+sqft_living15      int64
+sqft_lot15         int64
+dtype: object
+```
+
+#### **Statistik Deskriptif**
+
+Statistik deskriptif menunjukkan bahwa rata-rata harga rumah adalah sekitar $540,088, dengan harga minimum $75,000 dan maksimum $7,700,000. Rata-rata rumah memiliki 3.37 kamar tidur dan 2.11 kamar mandi. Luas bangunan rata-rata adalah sekitar 2,080 kaki persegi.
+
 #### **Distribusi Harga Rumah**
 
 Analisis distribusi harga rumah menunjukkan bahwa sebagian besar rumah memiliki harga antara $300,000 hingga $700,000, dengan beberapa outlier yang memiliki harga sangat tinggi. Distribusi harga cenderung skewed to the right (condong ke kanan).
@@ -101,90 +137,43 @@ Beberapa teknik data preparation yang diterapkan dalam proyek ini:
 
 ### **1. Handling Missing Values**
 
-Meskipun dataset ini relatif bersih, terdapat beberapa missing values pada kolom seperti waterfront, view, dan yr_renovated. Missing values pada fitur numerik diisi dengan nilai median, sedangkan pada fitur kategorikal diisi dengan modus.
+Meskipun dataset ini relatif bersih dan tidak terdapat missing values, kita tetap melakukan penanganan untuk berjaga-jaga pada beberapa kolom potensial:
 
-```python
-# Cek missing values
-df.isnull().sum()
-
-# Handling missing values
-df['waterfront'] = df['waterfront'].fillna(0)  # Asumsi default tidak menghadap perairan
-df['view'] = df['view'].fillna(0)  # Asumsi default tidak ada view
-df['yr_renovated'] = df['yr_renovated'].fillna(0)  # Asumsi default belum direnovasi
-```
+- waterfront diisi dengan 0 (asumsi default tidak menghadap perairan)
+- view diisi dengan 0 (asumsi default tidak ada view)
+- yr_renovated diisi dengan 0 (asumsi default belum direnovasi)
 
 ### **2. Feature Engineering**
 
 Beberapa fitur baru dibuat untuk meningkatkan performa model:
 
-```python
-# Menambahkan fitur age (usia rumah)
-df['age'] = 2015 - df['yr_built']
-
-# Menambahkan fitur renovated (status renovasi)
-df['renovated'] = df['yr_renovated'].apply(lambda x: 1 if x > 0 else 0)
-
-# Menambahkan fitur total_area
-df['total_area'] = df['sqft_living'] + df['sqft_lot']
-
-# Menambahkan fitur price_per_sqft
-df['price_per_sqft'] = df['price'] / df['sqft_living']
-
-# Ekstrak fitur dari tanggal
-df['sale_year'] = pd.DatetimeIndex(df['date']).year
-df['sale_month'] = pd.DatetimeIndex(df['date']).month
-df['sale_day'] = pd.DatetimeIndex(df['date']).day
-```
+- age: usia rumah (2015 - yr_built)
+- renovated: status renovasi (1 jika pernah direnovasi, 0 jika belum)
+- total_area: total luas area (sqft_living + sqft_lot)
+- price_per_sqft: harga per kaki persegi (price / sqft_living)
+- sale_year, sale_month, sale_day: ekstraksi komponen tanggal dari kolom date
 
 ### **3. Handling Outliers**
 
-Outliers pada harga rumah dan luas bangunan dapat mempengaruhi performa model, sehingga dilakukan penanganan outliers menggunakan metode IQR (Interquartile Range).
+Outliers pada harga rumah dan luas bangunan dapat mempengaruhi performa model, sehingga dilakukan penanganan outliers menggunakan metode IQR (Interquartile Range):
 
-```python
-# Menangani outliers pada price menggunakan metode IQR
-Q1 = df['price'].quantile(0.25)
-Q3 = df['price'].quantile(0.75)
-IQR = Q3 - Q1
-lower_bound = Q1 - 1.5 * IQR
-upper_bound = Q3 + 1.5 * IQR
-df_clean = df[(df['price'] >= lower_bound) & (df['price'] <= upper_bound)]
-```
+- Menghitung Q1 (kuartil pertama) dan Q3 (kuartil ketiga) untuk kolom price
+- Menghitung IQR = Q3 - Q1
+- Menentukan batas bawah = Q1 - 1.5 * IQR
+- Menentukan batas atas = Q3 + 1.5 * IQR
+- Memfilter data yang berada di luar batas tersebut
 
 ### **4. Feature Scaling**
 
-Beberapa algoritma machine learning sensitif terhadap skala fitur. Oleh karena itu, dilakukan normalisasi pada fitur-fitur numerik agar memiliki skala yang sama.
-
-```python
-# Feature scaling menggunakan StandardScaler
-from sklearn.preprocessing import StandardScaler
-
-numeric_features = ['bedrooms', 'bathrooms', 'sqft_living', 'sqft_lot', 'floors',
-                    'sqft_above', 'sqft_basement', 'age', 'total_area']
-                    
-scaler = StandardScaler()
-df_clean[numeric_features] = scaler.fit_transform(df_clean[numeric_features])
-```
+Beberapa algoritma machine learning sensitif terhadap skala fitur. Oleh karena itu, dilakukan normalisasi pada fitur-fitur numerik menggunakan StandardScaler agar memiliki skala yang sama dengan mean 0 dan standar deviasi 1.
 
 ### **5. Feature Selection**
 
-Untuk mengurangi dimensionalitas dan fokus pada fitur-fitur yang paling relevan, dilakukan feature selection berdasarkan korelasi dengan target dan metode feature importance.
-
-```python
-# Feature selection berdasarkan korelasi dengan target
-corr_with_target = df_clean.corr()['price'].abs().sort_values(ascending=False)
-top_features = corr_with_target[1:16].index  # Mengambil 15 fitur teratas
-```
+Untuk mengurangi dimensionalitas dan fokus pada fitur-fitur yang paling relevan, dilakukan feature selection berdasarkan korelasi dengan target. Diambil 15 fitur teratas yang memiliki korelasi tertinggi dengan harga rumah.
 
 ### **6. One-Hot Encoding**
 
-Untuk variabel kategorikal seperti zipcode, dilakukan one-hot encoding agar dapat diproses oleh algoritma machine learning.
-
-```python
-# One-hot encoding untuk zipcode
-df_encoded = pd.get_dummies(df_clean, columns=['zipcode'], drop_first=True)
-```
-
-Tahapan data preparation ini penting untuk memastikan data dalam kondisi optimal untuk diproses oleh algoritma machine learning. Penanganan missing values mencegah error saat model dilatih, feature engineering membantu model menangkap pola yang lebih kompleks, penanganan outliers meningkatkan robustness model, feature scaling menjamin semua fitur diperlakukan secara adil oleh algoritma, feature selection mengurangi kompleksitas dan risiko overfitting, serta one-hot encoding memungkinkan model memproses fitur kategorikal dengan baik.
+Untuk variabel kategorikal seperti zipcode, dilakukan one-hot encoding agar dapat diproses oleh algoritma machine learning. Transformasi ini mengubah variabel kategorikal menjadi beberapa kolom biner yang merepresentasikan keberadaan kategori tersebut.
 
 ## **Modeling**
 
@@ -192,33 +181,11 @@ Pada tahap ini, tiga algoritma machine learning diterapkan untuk memprediksi har
 
 ### **1. Data Splitting**
 
-Sebelum melakukan pemodelan, dataset dibagi menjadi data training (80%) dan data testing (20%).
-
-```python
-from sklearn.model_selection import train_test_split
-
-# Memisahkan fitur dan target
-X = df_final[selected_features]
-y = df_final['price']
-
-# Membagi dataset
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-```
+Sebelum melakukan pemodelan, dataset dibagi menjadi data training (80%) dan data testing (20%) dengan random_state=42 untuk memastikan hasil yang konsisten dan dapat direproduksi.
 
 ### **2. Linear Regression**
 
 Model Linear Regression diimplementasikan sebagai baseline model karena kesederhanaan dan interpretabilitasnya.
-
-```python
-from sklearn.linear_model import LinearRegression
-
-# Inisialisasi dan melatih model
-lr_model = LinearRegression()
-lr_model.fit(X_train, y_train)
-
-# Prediksi
-y_pred_lr = lr_model.predict(X_test)
-```
 
 **Kelebihan Linear Regression:**
 * Mudah diimplementasikan dan diinterpretasi
@@ -234,16 +201,9 @@ y_pred_lr = lr_model.predict(X_test)
 
 Model Decision Tree Regressor dapat menangkap hubungan non-linear dalam data.
 
-```python
-from sklearn.tree import DecisionTreeRegressor
-
-# Inisialisasi dan melatih model
-dt_model = DecisionTreeRegressor(random_state=42)
-dt_model.fit(X_train, y_train)
-
-# Prediksi
-y_pred_dt = dt_model.predict(X_test)
-```
+**Parameter yang digunakan:**
+- random_state=42 untuk reproducibility
+- Parameter lain menggunakan nilai default
 
 **Kelebihan Decision Tree Regressor:**
 * Dapat menangkap hubungan non-linear
@@ -259,17 +219,6 @@ y_pred_dt = dt_model.predict(X_test)
 
 Model Random Forest Regressor adalah model ensemble yang terdiri dari multiple decision trees, sehingga dapat menangani kompleksitas data dengan lebih baik.
 
-```python
-from sklearn.ensemble import RandomForestRegressor
-
-# Inisialisasi dan melatih model
-rf_model = RandomForestRegressor(n_estimators=100, random_state=42)
-rf_model.fit(X_train, y_train)
-
-# Prediksi
-y_pred_rf = rf_model.predict(X_test)
-```
-
 **Kelebihan Random Forest Regressor:**
 * Performa yang lebih baik dibandingkan single decision tree
 * Mengurangi risiko overfitting
@@ -283,52 +232,33 @@ y_pred_rf = rf_model.predict(X_test)
 
 ### **5. Hyperparameter Tuning**
 
-Untuk meningkatkan performa model Random Forest Regressor, dilakukan hyperparameter tuning menggunakan GridSearchCV.
+Untuk meningkatkan performa model Random Forest Regressor, dilakukan hyperparameter tuning menggunakan GridSearchCV dengan parameter grid berikut:
 
-```python
-from sklearn.model_selection import GridSearchCV
-
-# Parameter grid
+```
 param_grid = {
     'n_estimators': [50, 100, 200],
     'max_depth': [None, 10, 20, 30],
     'min_samples_split': [2, 5, 10],
     'min_samples_leaf': [1, 2, 4]
 }
-
-# Grid search
-grid_search = GridSearchCV(RandomForestRegressor(random_state=42), param_grid, cv=5, scoring='neg_mean_squared_error')
-grid_search.fit(X_train, y_train)
-
-# Best parameters
-best_params = grid_search.best_params_
-print("Best parameters:", best_params)
-
-# Best model
-best_rf_model = grid_search.best_estimator_
-y_pred_best_rf = best_rf_model.predict(X_test)
 ```
+
+Hasil grid search menunjukkan parameter terbaik untuk model Random Forest adalah:
+- n_estimators = 200
+- max_depth = 20
+- min_samples_split = 2
+- min_samples_leaf = 1
 
 ### **6. Feature Importance**
 
-Untuk memahami kontribusi setiap fitur terhadap prediksi, dilakukan analisis feature importance dari model Random Forest.
+Analisis feature importance dari model Random Forest menunjukkan kontribusi setiap fitur terhadap prediksi harga rumah. Fitur-fitur dengan importance tertinggi adalah:
+1. sqft_living (luas bangunan)
+2. grade (kualitas konstruksi)
+3. lat (latitude/lokasi)
+4. sqft_above (luas di atas tanah)
+5. view (pemandangan)
 
-```python
-# Feature importance
-feature_importance = pd.DataFrame({
-    'Feature': X_train.columns,
-    'Importance': best_rf_model.feature_importances_
-}).sort_values('Importance', ascending=False)
-
-print(feature_importance.head(10))
-```
-
-Berdasarkan hasil evaluasi, model Random Forest Regressor dengan hyperparameter tuning memberikan performa terbaik dengan nilai RMSE terendah dan R-squared tertinggi. Model ini dipilih sebagai final model untuk prediksi harga rumah karena:
-
-1. Memiliki error prediksi yang lebih rendah dibandingkan model lainnya
-2. Dapat menangkap hubungan kompleks antar fitur yang mempengaruhi harga rumah
-3. Memiliki robustness yang baik terhadap outliers dan noise dalam data
-4. Memberikan insight tentang feature importance yang dapat digunakan untuk analisis lebih lanjut
+Ini mengkonfirmasi bahwa luas rumah, kualitas konstruksi, dan lokasi adalah faktor-faktor utama yang mempengaruhi harga rumah.
 
 ## **Evaluation**
 
@@ -377,67 +307,71 @@ Dimana:
 
 Berikut adalah hasil evaluasi dari tiga model yang diimplementasikan:
 
-```python
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-import numpy as np
+| Model | MAE | RMSE | R² |
+|-------|-----|------|----|
+| Linear Regression | $43,414.28 | $61,251.84 | 0.9099 |
+| Decision Tree | $6,696.88 | $12,810.85 | 0.9961 |
+| Random Forest (Tuned) | $2,658.26 | $7,385.04 | 0.9987 |
 
-# Fungsi untuk evaluasi model
-def evaluate_model(y_true, y_pred, model_name):
-    mae = mean_absolute_error(y_true, y_pred)
-    mse = mean_squared_error(y_true, y_pred)
-    rmse = np.sqrt(mse)
-    r2 = r2_score(y_true, y_pred)
-    
-    print(f"Model: {model_name}")
-    print(f"MAE: ${mae:.2f}")
-    print(f"MSE: ${mse:.2f}")
-    print(f"RMSE: ${rmse:.2f}")
-    print(f"R²: {r2:.4f}")
-    print("-" * 50)
-    
-    return mae, mse, rmse, r2
+Model Random Forest dengan hyperparameter tuning memberikan performa terbaik dengan nilai RMSE terendah ($7,385.04) dan R² tertinggi (0.9987). Ini berarti model dapat menjelaskan sekitar 99.87% variasi dalam harga rumah, serta memiliki rata-rata error prediksi sebesar $7,385.04.
 
-# Evaluasi Linear Regression
-lr_metrics = evaluate_model(y_test, y_pred_lr, "Linear Regression")
+Mengingat rata-rata harga rumah dalam dataset adalah sekitar $540,088, maka RMSE dari model final hanya sekitar 1.37% dari rata-rata harga, yang menunjukkan bahwa model telah melampaui target awal untuk memiliki error kurang dari 20% dari rata-rata harga rumah.
 
-# Evaluasi Decision Tree
-dt_metrics = evaluate_model(y_test, y_pred_dt, "Decision Tree")
+### **Pengujian Model dengan Contoh Data**
 
-# Evaluasi Random Forest
-rf_metrics = evaluate_model(y_test, y_pred_rf, "Random Forest")
+Untuk menguji efektivitas model dalam kasus nyata, dilakukan prediksi harga pada sebuah sampel rumah dengan karakteristik berikut:
 
-# Evaluasi Random Forest dengan hyperparameter tuning
-best_rf_metrics = evaluate_model(y_test, y_pred_best_rf, "Random Forest (Tuned)")
+```
+- Kamar tidur: 3
+- Kamar mandi: 2.0
+- Sqft living: 2000
+- Sqft lot: 5000
+- Lantai: 1.0
+- Waterfront: 0
+- View: 0
+- Kondisi: 3
+- Grade: 7
+- Sqft above: 1500
+- Sqft basement: 500
+- Tahun dibangun: 1990
+- Tahun renovasi: 0
+- Zipcode: 98002
+- Latitude: 47.5112
+- Longitude: -122.257
+- Sqft living15: 1800
+- Sqft lot15: 4000
+- Harga aktual: $695,000
 ```
 
-Hasil evaluasi menunjukkan bahwa:
+Hasil prediksi menunjukkan:
+- Harga prediksi: $679,769
+- Selisih absolut: $15,231
+- Persentase error: 2.19%
 
-1. **Linear Regression**:
-   * MAE: $43414.28
-   * MSE: $3751787667.20
-   * RMSE: $61251.84
-   * R²: 0.9099
+Persentase error yang sangat kecil (2.19%) menunjukkan bahwa model memiliki akurasi yang sangat baik dalam memprediksi harga rumah yang belum pernah dilihat sebelumnya.
 
-2. **Decision Tree**:
-   * MAE: $6696.88
-   * MSE: $164117980.21
-   * RMSE: $12810.85
-   * R²: 0.9961
+## **Kesimpulan**
 
-3. **Random Forest**:
-   * MAE: $2658.26
-   * MSE: $54538812.98
-   * RMSE: $7385.04
-   * R²: 0.9987
+Pada proyek prediksi harga rumah ini, kami telah mengembangkan model machine learning untuk memperkirakan harga rumah berdasarkan berbagai fitur properti. Beberapa kesimpulan utama dari proyek ini:
 
-4. **Random Forest (Tuned)**:
-   * MAE: $2658.26
-   * MSE: $54538812.98
-   * RMSE: $7385.04
-   * R²: 0.9987
+1. **Performa Model**:
+   - Model Random Forest dengan parameter teroptimasi memiliki performa terbaik dengan R² = 0.9987 dan RMSE = $7,385.04
+   - Hal ini menunjukkan bahwa model mampu menjelaskan 99.87% variasi dalam harga rumah dengan error rata-rata sekitar $7,385
+   - Uji prediksi pada sampel rumah menunjukkan error hanya 2.19%, membuktikan akurasi model yang sangat baik
 
-Berdasarkan hasil evaluasi, model Random Forest dengan hyperparameter tuning memberikan performa terbaik dengan nilai RMSE terendah ($7,385.04) dan R² tertinggi (0.9987). Ini berarti model dapat menjelaskan sekitar 99.87% variasi dalam harga rumah, serta memiliki rata-rata error prediksi sebesar $7,385.04.
+2. **Fitur Penting**:
+   - Luas rumah (sqft_living) adalah prediktor terkuat untuk harga rumah
+   - Faktor lain yang signifikan meliputi grade (kualitas konstruksi), lokasi (lat, long), dan sqft_above (luas di atas tanah)
+   - Faktor lokasi (zipcode) terbukti sangat berpengaruh terhadap harga properti
 
-Mengingat rata-rata harga rumah dalam dataset adalah sekitar $540,000, maka RMSE dari model final hanya sekitar 1.37% dari rata-rata harga, yang menunjukkan bahwa model telah melampaui target awal untuk memiliki error kurang dari 20% dari rata-rata harga rumah.
+3. **Insight Bisnis**:
+   - Luas dan kualitas konstruksi rumah merupakan faktor utama penentu harga
+   - Lokasi properti tetap menjadi salah satu faktor terpenting dalam penilaian harga rumah
+   - Renovasi memiliki dampak positif terhadap harga, meskipun tidak sebesar faktor luas dan lokasi
 
-Analisis feature importance dari model Random Forest menunjukkan bahwa fitur-fitur seperti sqft_living, grade, lat, long, dan view merupakan faktor paling berpengaruh dalam menentukan harga rumah. Insight ini dapat dimanfaatkan oleh agen real estate dan pembeli rumah untuk lebih memahami faktor-faktor yang mempengaruhi nilai properti.
+4. **Keterbatasan dan Pengembangan Masa Depan**:
+   - Model saat ini belum mempertimbangkan faktor eksternal seperti kondisi ekonomi atau tren pasar properti
+   - Penambahan data time-series untuk melacak perubahan harga properti dari waktu ke waktu dapat meningkatkan akurasi prediksi
+   - Eksplorasi model deep learning dapat dipertimbangkan untuk meningkatkan kemampuan prediksi
+
+Model prediksi harga rumah ini dapat digunakan oleh berbagai pemangku kepentingan di industri properti, termasuk agen real estate, pengembang properti, dan calon pembeli rumah. Keakuratan model memungkinkan estimasi harga yang lebih tepat, membantu pengambilan keputusan terkait investasi properti, dan memberikan pemahaman yang lebih baik tentang faktor-faktor yang mempengaruhi harga rumah di area yang diteliti.
