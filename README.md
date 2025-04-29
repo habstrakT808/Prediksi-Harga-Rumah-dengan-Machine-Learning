@@ -133,47 +133,94 @@ Rumah yang telah direnovasi umumnya memiliki harga yang lebih tinggi dibandingka
 
 ## **Data Preparation**
 
-Beberapa teknik data preparation yang diterapkan dalam proyek ini:
+Tahap data preparation melibatkan serangkaian proses untuk mempersiapkan data agar siap digunakan dalam pemodelan machine learning. Berikut adalah tahapan lengkap yang dilakukan dalam proyek ini:
 
-### **1. Handling Missing Values**
+### **1. Penanganan Missing Values**
 
-Meskipun dataset ini relatif bersih dan tidak terdapat missing values, kita tetap melakukan penanganan untuk berjaga-jaga pada beberapa kolom potensial:
+Meskipun dataset ini relatif bersih dan tidak terdapat missing values, dilakukan penanganan preventif pada beberapa kolom yang berpotensi memiliki missing values di masa depan:
 
-- waterfront diisi dengan 0 (asumsi default tidak menghadap perairan)
-- view diisi dengan 0 (asumsi default tidak ada view)
-- yr_renovated diisi dengan 0 (asumsi default belum direnovasi)
+- Kolom `waterfront` diisi dengan 0 (mengasumsikan bahwa rumah tidak menghadap perairan)
+- Kolom `view` diisi dengan 0 (mengasumsikan bahwa rumah tidak memiliki pemandangan khusus)
+- Kolom `yr_renovated` diisi dengan 0 (mengasumsikan bahwa rumah belum pernah direnovasi)
+
+Pendekatan ini memastikan kontinuitas data dan konsistensi dalam interpretasi nilai-nilai tersebut.
 
 ### **2. Feature Engineering**
 
-Beberapa fitur baru dibuat untuk meningkatkan performa model:
+Untuk meningkatkan kemampuan prediktif model, beberapa fitur baru dibuat berdasarkan fitur yang sudah ada:
 
-- age: usia rumah (2015 - yr_built)
-- renovated: status renovasi (1 jika pernah direnovasi, 0 jika belum)
-- total_area: total luas area (sqft_living + sqft_lot)
-- price_per_sqft: harga per kaki persegi (price / sqft_living)
-- sale_year, sale_month, sale_day: ekstraksi komponen tanggal dari kolom date
+- `age`: Usia rumah, dihitung dari tahun saat data diambil (2015) dikurangi tahun pembangunan (`yr_built`)
+- `renovated`: Status renovasi, bernilai 1 jika rumah pernah direnovasi (`yr_renovated` > 0) dan 0 jika belum
+- `total_area`: Total luas area, merupakan penjumlahan dari luas bangunan (`sqft_living`) dan luas tanah (`sqft_lot`)
+- `price_per_sqft`: Harga per kaki persegi, dihitung dengan membagi harga (`price`) dengan luas bangunan (`sqft_living`)
+- Komponen tanggal: `sale_year`, `sale_month`, dan `sale_day` diekstrak dari kolom `date` untuk analisis temporal
 
-### **3. Handling Outliers**
+Fitur-fitur baru ini memberikan perspektif tambahan yang dapat membantu model dalam mengenali pola-pola harga rumah.
 
-Outliers pada harga rumah dan luas bangunan dapat mempengaruhi performa model, sehingga dilakukan penanganan outliers menggunakan metode IQR (Interquartile Range):
+### **3. Penanganan Outliers**
 
-- Menghitung Q1 (kuartil pertama) dan Q3 (kuartil ketiga) untuk kolom price
-- Menghitung IQR = Q3 - Q1
-- Menentukan batas bawah = Q1 - 1.5 * IQR
-- Menentukan batas atas = Q3 + 1.5 * IQR
-- Memfilter data yang berada di luar batas tersebut
+Outliers pada variabel target (harga rumah) dapat mempengaruhi performa model, terutama pada model regresi. Untuk menangani outliers, dilakukan metode IQR (Interquartile Range):
+
+1. Menghitung Q1 (kuartil pertama) dan Q3 (kuartil ketiga) untuk kolom `price`
+2. Menghitung IQR = Q3 - Q1
+3. Menentukan batas bawah = Q1 - 1.5 * IQR
+4. Menentukan batas atas = Q3 + 1.5 * IQR
+5. Memfilter data yang berada di luar batas tersebut
+
+Hasil dari proses ini adalah dataset yang lebih bersih dengan 20,655 baris data (sekitar 958 data outlier dihapus). Penghapusan outliers ini membantu meningkatkan stabilitas dan akurasi model, terutama untuk algoritma yang sensitif terhadap outliers seperti Linear Regression.
 
 ### **4. Feature Scaling**
 
-Beberapa algoritma machine learning sensitif terhadap skala fitur. Oleh karena itu, dilakukan normalisasi pada fitur-fitur numerik menggunakan StandardScaler agar memiliki skala yang sama dengan mean 0 dan standar deviasi 1.
+Feature scaling penting dilakukan karena beberapa algoritma machine learning sensitif terhadap skala fitur. Dalam proyek ini, normalisasi dilakukan pada fitur-fitur numerik menggunakan StandardScaler:
+
+- Fitur numerik yang dinormalisasi meliputi: `bedrooms`, `bathrooms`, `sqft_living`, `sqft_lot`, `floors`, `sqft_above`, `sqft_basement`, `age`, dan `total_area`
+- StandardScaler mengubah distribusi data menjadi mean = 0 dan standar deviasi = 1
+
+Proses scaling ini memastikan bahwa semua fitur memiliki kontribusi yang seimbang terhadap model dan mencegah fitur dengan skala besar mendominasi perhitungan.
 
 ### **5. Feature Selection**
 
-Untuk mengurangi dimensionalitas dan fokus pada fitur-fitur yang paling relevan, dilakukan feature selection berdasarkan korelasi dengan target. Diambil 15 fitur teratas yang memiliki korelasi tertinggi dengan harga rumah.
+Untuk fokus pada fitur-fitur yang paling relevan dan mengurangi dimensionalitas data, dilakukan feature selection berdasarkan korelasi dengan target:
+
+1. Menghitung korelasi absolut antara setiap fitur dengan harga rumah (`price`)
+2. Mengurutkan fitur berdasarkan nilai korelasi dari tertinggi ke terendah
+3. Mengambil 15 fitur teratas yang memiliki korelasi tertinggi dengan harga
+
+Pendekatan ini memungkinkan model untuk fokus pada fitur-fitur yang paling berpengaruh terhadap harga rumah, sehingga mengurangi kompleksitas dan potensi overfitting.
 
 ### **6. One-Hot Encoding**
 
-Untuk variabel kategorikal seperti zipcode, dilakukan one-hot encoding agar dapat diproses oleh algoritma machine learning. Transformasi ini mengubah variabel kategorikal menjadi beberapa kolom biner yang merepresentasikan keberadaan kategori tersebut.
+Fitur kategorikal seperti `zipcode` perlu diubah menjadi format numerik agar dapat diproses oleh algoritma machine learning. Dalam proyek ini, dilakukan one-hot encoding pada kolom `zipcode`:
+
+- Proses one-hot encoding mengubah kolom `zipcode` menjadi beberapa kolom biner (dummy variables)
+- Setiap kolom baru merepresentasikan satu nilai unik dari `zipcode` (misalnya `zipcode_98001`, `zipcode_98002`, dll.)
+- Parameter `drop_first=True` digunakan untuk menghindari multikolinearitas dengan menghilangkan salah satu kategori (kategori referensi)
+
+Transformasi ini memungkinkan model untuk menangkap pengaruh lokasi (melalui kode pos) terhadap harga rumah.
+
+### **7. Pemilihan Fitur Final**
+
+Tahap akhir dalam persiapan data adalah pemilihan dan penyusunan dataset final yang akan digunakan untuk pemodelan:
+
+1. Menggabungkan fitur-fitur terpilih dari hasil feature selection
+2. Menambahkan fitur hasil feature engineering yang belum termasuk dalam hasil feature selection
+3. Menambahkan beberapa fitur `zipcode` hasil one-hot encoding (10 fitur pertama)
+4. Menyusun dataset final dengan kolom `price` sebagai target dan fitur-fitur terpilih sebagai prediktor
+
+Hasil dari seluruh proses preparation ini adalah dataset yang siap digunakan untuk pemodelan dengan jumlah fitur yang optimal dan kualitas data yang baik.
+
+### **8. Pembagian Data**
+
+Tahap terakhir sebelum pemodelan adalah pembagian data menjadi data training dan data testing:
+
+1. Data dibagi menjadi variabel independen (X) yang terdiri dari seluruh fitur terpilih, dan variabel dependen (y) yaitu harga rumah (`price`)
+2. Pembagian data dilakukan dengan proporsi 80% untuk data training dan 20% untuk data testing
+3. Parameter `random_state=42` digunakan untuk memastikan hasil yang konsisten dan dapat direproduksi
+
+Data training digunakan untuk melatih model machine learning, sementara data testing digunakan untuk evaluasi performa model pada data yang belum pernah dilihat sebelumnya. Pembagian data ini penting untuk menilai kemampuan generalisasi model dan mencegah overfitting.
+
+Seluruh rangkaian proses data preparation ini menghasilkan dataset yang bersih, terstruktur, dan siap untuk digunakan dalam tahap pemodelan machine learning. Proses ini sangat penting karena kualitas data yang digunakan akan sangat mempengaruhi performa model yang dihasilkan.
+
 
 ## **Modeling**
 
