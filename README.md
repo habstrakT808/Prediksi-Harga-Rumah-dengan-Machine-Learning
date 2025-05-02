@@ -137,128 +137,59 @@ Tahap data preparation dilakukan secara sistematis mengikuti urutan dalam notebo
 
 ### **1. Penanganan Missing Values**
 
-Meskipun pengecekan menunjukkan tidak ada missing values dalam dataset, dilakukan penanganan preventif pada beberapa kolom:
-
-```python
-df['waterfront'] = df['waterfront'].fillna(0)
-df['view'] = df['view'].fillna(0)
-df['yr_renovated'] = df['yr_renovated'].fillna(0)
-```
-
-Pendekatan ini memastikan bahwa jika ada missing values di masa depan, kolom-kolom tersebut akan terisi dengan nilai default yang sesuai.
+Meskipun pengecekan menunjukkan tidak ada missing values dalam dataset, dilakukan penanganan preventif pada beberapa kolom penting. Kolom 'waterfront', 'view', dan 'yr_renovated' diisi dengan nilai 0 untuk mengantisipasi kemungkinan adanya missing values di masa depan. Pendekatan ini memastikan bahwa kolom-kolom tersebut akan terisi dengan nilai default yang sesuai dengan interpretasi datanya (misalnya, 0 pada 'yr_renovated' berarti rumah belum pernah direnovasi).
 
 ### **2. Feature Engineering**
 
-Untuk meningkatkan kemampuan prediktif model, beberapa fitur baru dibuat:
+Untuk meningkatkan kemampuan prediktif model, beberapa fitur baru dibuat berdasarkan fitur yang sudah ada:
 
-```python
-# Age of the house
-df['age'] = 2015 - df['yr_built']
+- **Age**: Menghitung usia rumah berdasarkan selisih antara tahun data (2015) dengan tahun pembangunan rumah.
+- **Renovated**: Membuat fitur biner yang menunjukkan status renovasi (1 jika pernah direnovasi, 0 jika belum).
+- **Total Area**: Menghitung total luas area dengan menjumlahkan luas bangunan dan luas tanah.
+- **Price per Square Foot**: Menghitung harga per kaki persegi dengan membagi harga rumah dengan luas bangunan.
+- **Komponen Tanggal**: Mengekstrak tahun, bulan, dan hari penjualan dari kolom tanggal untuk analisis temporal.
 
-# Renovation status
-df['renovated'] = df['yr_renovated'].apply(lambda x: 1 if x > 0 else 0)
-
-# Total area
-df['total_area'] = df['sqft_living'] + df['sqft_lot']
-
-# Price per square foot
-df['price_per_sqft'] = df['price'] / df['sqft_living']
-
-# Convert 'date' column to datetime
-df['date'] = pd.to_datetime(df['date'])
-
-# Extract date features
-df['sale_year'] = df['date'].dt.year
-df['sale_month'] = df['date'].dt.month
-df['sale_day'] = df['date'].dt.day
-```
-
-Fitur-fitur baru ini memberikan perspektif tambahan tentang properti yang dapat meningkatkan akurasi prediksi.
+Fitur-fitur baru ini memberikan perspektif tambahan tentang properti yang dapat meningkatkan akurasi prediksi model.
 
 ### **3. Penanganan Outliers**
 
-Outliers pada variabel target (harga rumah) dapat mempengaruhi performa model. Metode IQR (Interquartile Range) digunakan untuk mendeteksi dan menghapus outliers:
+Outliers pada variabel target (harga rumah) dapat mempengaruhi performa model, terutama untuk algoritma yang sensitif seperti Linear Regression. Metode IQR (Interquartile Range) digunakan untuk mendeteksi dan menghapus outliers:
 
-```python
-# Remove price outliers using IQR method
-Q1 = df['price'].quantile(0.25)
-Q3 = df['price'].quantile(0.75)
-IQR = Q3 - Q1
+1. Menghitung kuartil pertama (Q1) dan kuartil ketiga (Q3) dari distribusi harga
+2. Menghitung IQR sebagai selisih antara Q3 dan Q1
+3. Menentukan batas bawah (Q1 - 1.5*IQR) dan batas atas (Q3 + 1.5*IQR)
+4. Menghapus data yang berada di luar rentang tersebut
 
-lower_bound = Q1 - 1.5 * IQR
-upper_bound = Q3 + 1.5 * IQR
-
-df_clean = df[(df['price'] >= lower_bound) & (df['price'] <= upper_bound)]
-```
-
-Proses ini menghapus sekitar 958 data yang dianggap sebagai outliers, menyisakan 20,655 data yang lebih representatif.
+Proses ini menghapus sekitar 958 data yang dianggap sebagai outliers, menyisakan 20,655 data yang lebih representatif untuk pemodelan.
 
 ### **4. Feature Selection berdasarkan korelasi**
 
-Untuk fokus pada fitur yang paling relevan, dipilih 15 fitur teratas berdasarkan korelasi dengan target:
-
-```python
-corr_with_target = df_clean.corr()['price'].abs().sort_values(ascending=False)
-top_features = corr_with_target[1:16].index  # Excluding price itself
-```
-
-Pendekatan ini memungkinkan model untuk fokus pada fitur-fitur yang paling berpengaruh terhadap harga rumah.
+Untuk fokus pada fitur yang paling relevan dan mengurangi dimensionalitas data, dilakukan pemilihan fitur berdasarkan korelasi dengan target (harga rumah). Dari hasil analisis korelasi, dipilih 15 fitur teratas yang memiliki korelasi absolut tertinggi dengan harga. Pendekatan ini memungkinkan model untuk fokus pada fitur-fitur yang paling berpengaruh terhadap harga rumah dan mengurangi noise dari fitur yang kurang relevan.
 
 ### **5. Feature Scaling**
 
-Normalisasi fitur numerik dilakukan menggunakan StandardScaler untuk memastikan semua fitur memiliki kontribusi seimbang:
-
-```python
-numeric_features = ['bedrooms', 'bathrooms', 'sqft_living', 'sqft_lot', 'floors',
-                   'sqft_above', 'sqft_basement', 'age', 'total_area']
-
-scaler = StandardScaler()
-df_clean[numeric_features] = scaler.fit_transform(df_clean[numeric_features])
-```
-
-Proses ini mengubah distribusi data sehingga memiliki mean 0 dan standar deviasi 1.
+Normalisasi fitur numerik dilakukan menggunakan StandardScaler untuk memastikan semua fitur memiliki kontribusi seimbang dalam model. Fitur-fitur numerik seperti jumlah kamar tidur, kamar mandi, luas bangunan, luas tanah, jumlah lantai, luas area di atas tanah, luas basement, usia rumah, dan total area distandarisasi sehingga memiliki mean 0 dan standar deviasi 1. Proses scaling ini penting karena beberapa algoritma machine learning sensitif terhadap skala fitur, terutama algoritma berbasis jarak dan gradient descent.
 
 ### **6. One-Hot Encoding untuk zipcode**
 
-Fitur kategorikal (zipcode) diubah menjadi format numerik menggunakan one-hot encoding:
-
-```python
-df_encoded = pd.get_dummies(df_clean, columns=['zipcode'], drop_first=True)
-```
-
-Transformasi ini memungkinkan model untuk memahami pengaruh lokasi terhadap harga rumah.
+Fitur kategorikal 'zipcode' (kode pos) diubah menjadi format numerik menggunakan teknik one-hot encoding. Proses ini mengubah satu kolom kategorikal menjadi beberapa kolom biner, di mana setiap kolom merepresentasikan satu nilai unik dari kategori tersebut. Parameter drop_first=True digunakan untuk menghindari multikolinearitas dengan menghilangkan salah satu kategori. Transformasi ini memungkinkan model untuk memahami pengaruh lokasi (melalui kode pos) terhadap harga rumah dengan lebih baik.
 
 ### **7. Persiapan Final Dataset**
 
-Dataset final disusun dengan menggabungkan fitur-fitur terpilih dan hasil feature engineering:
+Dataset final disusun dengan menggabungkan fitur-fitur terpilih dari hasil feature selection dan feature engineering. Langkah-langkah yang dilakukan meliputi:
 
-```python
-selected_features = list(top_features)
-# Add engineered features if not already in selected_features
-for feature in ['renovated', 'age', 'total_area', 'sale_month']:
-    if feature not in selected_features:
-        selected_features.append(feature)
+1. Mengambil daftar fitur dari hasil feature selection (15 fitur dengan korelasi tertinggi)
+2. Menambahkan fitur hasil feature engineering yang belum termasuk dalam daftar tersebut ('renovated', 'age', 'total_area', 'sale_month')
+3. Menambahkan beberapa fitur 'zipcode' hasil one-hot encoding (10 fitur pertama) untuk memperhitungkan pengaruh lokasi
+4. Menyusun dataset final dengan kolom 'price' sebagai target dan fitur-fitur terpilih sebagai prediktor
 
-# Add some zipcode columns (location matters for house prices)
-zipcode_cols = [col for col in df_encoded.columns if 'zipcode' in col][:10]  # Take first 10 zipcodes
-selected_features.extend(zipcode_cols)
-
-# Prepare final dataframe with selected features
-df_final = df_encoded[['price'] + selected_features].copy()
-```
+Proses ini menghasilkan dataset yang optimal dengan jumlah fitur yang seimbang antara terlalu sedikit (underfitting) dan terlalu banyak (overfitting).
 
 ### **8. Split Data**
 
-Data dibagi menjadi data training (80%) dan data testing (20%):
+Tahap terakhir dalam persiapan data adalah pembagian dataset menjadi data training dan data testing dengan proporsi 80:20. Variabel independen (X) terdiri dari seluruh fitur terpilih, sementara variabel dependen (y) adalah harga rumah. Parameter random_state=42 digunakan untuk memastikan hasil yang konsisten dan dapat direproduksi. Data training digunakan untuk melatih model, sedangkan data testing digunakan untuk mengevaluasi performa model pada data yang belum pernah dilihat sebelumnya.
 
-```python
-X = df_final[selected_features]
-y = df_final['price']
-
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-```
-
-Parameter random_state=42 memastikan hasil yang konsisten dan dapat direproduksi.
+Seluruh proses data preparation ini sangat penting karena kualitas data yang digunakan akan sangat mempengaruhi performa model yang dihasilkan. Dengan persiapan data yang baik, model dapat belajar pola-pola yang relevan dalam data dan menghasilkan prediksi yang lebih akurat.
 
 ## **Modeling**
 
